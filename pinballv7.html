@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinball Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            background: #000;
+            display: block;
+        }
+        #pauseBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <button id="pauseBtn">Pausa</button>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const pauseBtn = document.getElementById('pauseBtn');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 10,
+            dx: 4, 
+            dy: -4 
+        };
+
+        let paddle = {
+            x: canvas.width / 2 - 75,
+            y: canvas.height - 20,
+            width: 150,
+            height: 10,
+            dx: 0,
+            speed: 7
+        };
+
+        let obstacles = [];
+        let rows = 5;
+        let cols = 8;
+        let score = 0;
+        let lives = 3;
+        let isPaused = false;
+        let gameStarted = false;
+
+        function createObstacles() {
+            obstacles = [];
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    if (Math.random() < 0.1) { 
+                        obstacles.push({
+                            type: 'star',
+                            x: col * (canvas.width / cols),
+                            y: row * 30,
+                            width: canvas.width / cols - 10,
+                            height: 20,
+                            color: getRandomColor(),
+                            spikes: 5,
+                            outerRadius: 15,
+                            innerRadius: 7.5
+                        });
+                    } else {
+                        obstacles.push({
+                            type: 'rect',
+                            x: col * (canvas.width / cols),
+                            y: row * 30,
+                            width: canvas.width / cols - 10,
+                            height: 20,
+                            color: getRandomColor()
+                        });
+                    }
+                }
+            }
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        function drawStar(cx, cy, spikes, outerRadius, innerRadius, color) {
+            let rot = Math.PI / 2 * 3;
+            let x = cx;
+            let y = cy;
+            const step = Math.PI / spikes;
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - outerRadius);
+            for (let i = 0; i < spikes; i++) {
+                x = cx + Math.cos(rot) * outerRadius;
+                y = cy + Math.sin(rot) * outerRadius;
+                ctx.lineTo(x, y);
+                rot += step;
+
+                x = cx + Math.cos(rot) * innerRadius;
+                y = cy + Math.sin(rot) * innerRadius;
+                ctx.lineTo(x, y);
+                rot += step;
+            }
+            ctx.lineTo(cx, cy - outerRadius);
+            ctx.closePath();
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        createObstacles();
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#0095DD';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddle.x, paddle.y, paddle.width, paddle.height);
+            ctx.fillStyle = '#00FF00';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                if (obstacle.type === 'star') {
+                    drawStar(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2, obstacle.spikes, obstacle.outerRadius, obstacle.innerRadius, obstacle.color);
+                } else {
+                    ctx.beginPath();
+                    ctx.rect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                    ctx.fillStyle = obstacle.color;
+                    ctx.fill();
+                    ctx.closePath();
+                }
+            });
+        }
+
+        function drawScore() {
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#FFF';
+            ctx.fillText('Score: ' + score, 8, 20);
+        }
+
+        function drawLives() {
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#FFF';
+            ctx.fillText('Lives: ' + lives, canvas.width - 80, canvas.height - 10);
+        }
+
+        function detectCollision() {
+            obstacles.forEach((obstacle, index) => {
+                if (ball.x + ball.dx > obstacle.x && ball.x + ball.dx < obstacle.x + obstacle.width &&
+                    ball.y + ball.dy > obstacle.y && ball.y + ball.dy < obstacle.y + obstacle.height) {
+                    if (obstacle.type === 'star') {
+                        lives += 1;
+                    }
+                    ball.dy = -ball.dy;
+                    obstacles.splice(index, 1);
+                    score += 10;
+                    if (obstacles.length === 0) {
+                        createObstacles();
+                    }
+                }
+            });
+        }
+
+        function detectPaddleCollision() {
+            if (ball.x + ball.dx > paddle.x && ball.x + ball.dx < paddle.x + paddle.width &&
+                ball.y + ball.dy > paddle.y && ball.y + ball.dy < paddle.y + paddle.height) {
+                ball.dy = -ball.dy;
+            }
+        }
+
+        function checkBounds() {
+            if (ball.x + ball.dx > canvas.width - ball.radius || ball.x + ball.dx < ball.radius) {
+                ball.dx = -ball.dx;
+            }
+            if (ball.y + ball.dy < ball.radius) {
+                ball.dy = -ball.dy;
+            }
+            if (ball.y + ball.dy > canvas.height - ball.radius) {
+                lives -= 1;
+                if (lives === 0) {
+                    alert('Fin del juego. Puntuación final: ' + score);
+                    document.location.reload();
+                } else {
+                    ball.x = canvas.width / 2;
+                    ball.y = canvas.height / 2;
+                    ball.dx = 4;
+                    ball.dy = -4;
+                }
+            }
+        }
+
+        function updatePaddle() {
+            paddle.x += paddle.dx;
+            if (paddle.x < 0) paddle.x = 0;
+            if (paddle.x + paddle.width > canvas.width) paddle.x = canvas.width - paddle.width;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (!gameStarted && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                gameStarted = true;
+            }
+            if (e.key === 'ArrowLeft') {
+                paddle.dx = -paddle.speed;
+            } else if (e.key === 'ArrowRight') {
+                paddle.dx = paddle.speed;
+            }
+        });
+
+        document.addEventListener('keyup', function(e) {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                paddle.dx = 0;
+            }
+        });
+
+        pauseBtn.addEventListener('click', function() {
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? 'Reanudar' : 'Pausa';
+        });
+
+        function update() {
+            if (!isPaused && gameStarted) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawBall();
+                drawPaddle();
+                drawObstacles();
+                drawScore();
+                drawLives();
+                detectCollision();
+                detectPaddleCollision();
+                checkBounds();
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                updatePaddle();
+            } else if (!gameStarted) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawPaddle();
+            }
+            requestAnimationFrame(update);
+        }
+
+        update();
+    </script>
+</body>
+</html>
+
